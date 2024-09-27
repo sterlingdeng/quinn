@@ -6,6 +6,8 @@ use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
 
 use std::{error::Error, net::SocketAddr, sync::Arc};
 
+mod custom_congestion;
+
 /// Constructs a QUIC endpoint configured for use a client only.
 ///
 /// ## Args
@@ -51,7 +53,16 @@ fn configure_client(
         certs.add(CertificateDer::from(*cert))?;
     }
 
-    Ok(ClientConfig::with_root_certificates(Arc::new(certs))?)
+    let mut cfg = ClientConfig::with_root_certificates(Arc::new(certs))?;
+    let mut transport_config = proto::TransportConfig::default();
+    transport_config.ack_timestamp_config(Some(proto::AckTimestampsConfig::default()));
+
+    transport_config
+        .congestion_controller_factory(Arc::new(custom_congestion::TestCubicWrapperFactory {}));
+
+    cfg.transport_config(Arc::new(transport_config));
+
+    Ok(cfg)
 }
 
 /// Returns default server configuration along with its certificate.
