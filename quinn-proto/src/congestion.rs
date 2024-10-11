@@ -7,10 +7,12 @@ use std::time::{Duration, Instant};
 
 mod bbr;
 mod cubic;
+mod gcc;
 mod new_reno;
 
 pub use bbr::{Bbr, BbrConfig};
 pub use cubic::{Cubic, CubicConfig};
+pub use gcc::{Gcc, GccConfig};
 pub use new_reno::{NewReno, NewRenoConfig};
 
 /// Common interface for different congestion controllers
