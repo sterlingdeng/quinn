@@ -1,6 +1,6 @@
 use proto::congestion::{Controller, ControllerFactory, CubicConfig};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use tracing::{info, info_span};
 
@@ -12,6 +12,7 @@ impl ControllerFactory for TestCubicWrapperFactory {
         let controller = TestCubicWrapper {
             last_packet: None,
             controller: cc.build(now, current_mtu),
+            dur_basis: Instant::now(),
         };
         Box::new(controller)
     }
@@ -20,13 +21,14 @@ impl ControllerFactory for TestCubicWrapperFactory {
 pub struct TestCubicWrapper {
     last_packet: Option<LastPacket>,
     controller: Box<dyn Controller>,
+    dur_basis: Instant,
 }
 
 #[derive(Debug, Clone)]
 struct LastPacket {
     _number: u64,
     _sent: Instant,
-    received: Option<Instant>,
+    received: Option<Duration>,
 }
 
 impl Clone for TestCubicWrapper {
@@ -35,6 +37,7 @@ impl Clone for TestCubicWrapper {
         Self {
             last_packet: self.last_packet.clone(),
             controller: cloned_controller,
+            dur_basis: self.dur_basis,
         }
     }
 }
@@ -69,12 +72,12 @@ impl Controller for TestCubicWrapper {
 
     // Provided methods
 
-    fn on_ack_packet(
+    fn on_ack_timestamped(
         &mut self,
         pn: u64,
         _now: Instant,
         sent: Instant,
-        received: Option<Instant>,
+        received: Option<Duration>,
         _bytes: u64,
         _app_limited: bool,
         _rtt: &proto::RttEstimator,
@@ -88,14 +91,14 @@ impl Controller for TestCubicWrapper {
                 if let Some(last_recv) = lp.received {
                     info!(
                         "receiver interpacket delay = {}",
-                        recv.duration_since(last_recv).as_millis()
+                        (recv - last_recv).as_millis()
                     )
                 }
             }
         }
         self.last_packet = Some(LastPacket {
-            number: pn,
-            sent,
+            _number: pn,
+            _sent: sent,
             received,
         })
     }
