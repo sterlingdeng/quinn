@@ -1,7 +1,27 @@
-use std::time::Duration;
+use time::Duration;
 
 const CHI: f64 = 0.001;
 const Q: f64 = 0.001;
+
+pub(crate) struct KalmanConfig {
+    gain: f64,
+    process_uncertainty: f64,
+    estimate_error: f64,
+    initial_estimate: Duration,
+    measurement_uncertainty: f64,
+}
+
+impl Default for KalmanConfig {
+    fn default() -> Self {
+        Self {
+            gain: 0.,
+            initial_estimate: Duration::ZERO,
+            process_uncertainty: Q,
+            estimate_error: 0.1,
+            measurement_uncertainty: 0.,
+        }
+    }
+}
 
 pub(crate) struct Kalman {
     gain: f64,
@@ -9,20 +29,22 @@ pub(crate) struct Kalman {
     process_uncertainty: f64,
     estimate_error: f64,
     measurement_uncertainty: f64,
-
-    disable_measurement_uncertainty_update: bool,
 }
 
 impl Kalman {
-    fn new() -> Self {
+    pub(crate) fn new(cfg: KalmanConfig) -> Self {
         Self {
-            ..Default::default()
+            gain: cfg.gain,
+            estimate: cfg.initial_estimate,
+            process_uncertainty: cfg.process_uncertainty,
+            estimate_error: cfg.estimate_error,
+            measurement_uncertainty: cfg.measurement_uncertainty,
         }
     }
 
-    fn update_estimate(&mut self, measurement: Duration) {
+    pub(crate) fn update_estimate(&mut self, measurement: Duration) {
         let z = measurement - self.estimate;
-        let zms = z.as_micros() as f64 / 1000.0;
+        let zms = z.whole_microseconds() as f64 / 1000.0;
         let alpha = (1.0 - CHI).powf(30.0 / (1000. * 5. * 1_000_000.));
         let root = self.measurement_uncertainty.sqrt();
         let root3 = 3. * root;
@@ -33,26 +55,32 @@ impl Kalman {
             (alpha * self.measurement_uncertainty + (1. - alpha) * zms.powf(2.)).max(1.)
         };
 
-        let estimate_uncertainty = self.estimate_error + Q;
+        let estimate_uncertainty = self.estimate_error + self.process_uncertainty;
         self.gain = estimate_uncertainty / (estimate_uncertainty + self.measurement_uncertainty);
-        self.estimate += Duration::from_nanos((self.gain * zms * 1_000_000.) as u64);
+        self.estimate += Duration::nanoseconds((self.gain * zms * 1_000_000.) as i64);
         self.estimate_error = (1. - self.gain) * estimate_uncertainty;
     }
 
-    fn estimate(&self) -> Duration {
+    pub(crate) fn get_estimate(&self) -> Duration {
         self.estimate
     }
 }
 
-impl Default for Kalman {
-    fn default() -> Self {
-        Self {
-            gain: 0.0,
-            estimate: Duration::default(),
-            process_uncertainty: 1e-3,
-            estimate_error: 0.1,
-            measurement_uncertainty: 0.0,
-            disable_measurement_uncertainty_update: false,
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kalman() {
+        let cfg = KalmanConfig {
+            initial_estimate: Duration::milliseconds(10),
+            estimate_error: 100. * 100.,
+            process_uncertainty: 0.15,
+            measurement_uncertainty: 0.01,
+            ..Default::default()
+        };
+        let mut k = Kalman::new(cfg);
+        k.update_estimate(Duration::microseconds(50450));
+        assert_eq!(Duration::nanoseconds(50449959), k.get_estimate());
     }
 }
