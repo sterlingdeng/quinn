@@ -23,6 +23,7 @@ impl Default for KalmanConfig {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct Kalman {
     gain: f64,
     estimate: Duration,

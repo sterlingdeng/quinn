@@ -3,9 +3,7 @@ use tracing::warn;
 
 use time::Duration;
 
-use crate::congestion::gcc::Acknowledgement;
-
-pub(crate) type Bitrate = u32;
+use crate::congestion::gcc::{Acknowledgement, Bitrate};
 
 // `N(i)` is the number of packets received the past T seconds and `L(j)` is
 // the payload size of packet j.  A window between 0.5 and 1 second is
@@ -30,6 +28,7 @@ impl Default for RateCalculatorConfig {
 
 /// RateCalculator tracks the bitrate sent over the link within a duration `window`.
 /// In the context of GCC and the RFC, this calculates the R_hat variable.
+#[derive(Clone)]
 pub(crate) struct RateCalculator {
     window_duration: Duration,
     max_count: usize,
@@ -93,6 +92,7 @@ impl RateCalculator {
         if self.packets.len() <= 1 {
             return None;
         }
+        println!("size.bytes: {}", self.size_bytes);
 
         // Unwrap safety 1: Checked if empty above
         // Unwrap safety 2: The front is guaranteed to contain an arrival.
@@ -109,7 +109,6 @@ impl RateCalculator {
                 if dur.is_zero() {
                     None
                 } else {
-                    println!("{} {}", dur, self.size_bytes * 8);
                     Some(((self.size_bytes * 8) as f64 / dur.as_seconds_f64()) as Bitrate)
                 }
             }
@@ -133,17 +132,21 @@ mod tests {
             max_count: 30,
         });
 
-        rc.add_ack(
-            Acknowledgement::new(0, 5, Duration::milliseconds(0))
-                .set_arrival(Duration::milliseconds(10)),
-        );
+        rc.add_ack(Acknowledgement::new(
+            0,
+            5,
+            Duration::milliseconds(0),
+            Some(Duration::milliseconds(10)),
+        ));
 
         assert!(rc.effective_bitrate().is_none());
 
-        rc.add_ack(
-            Acknowledgement::new(1, 5, Duration::milliseconds(0))
-                .set_arrival(Duration::milliseconds(20)),
-        );
+        rc.add_ack(Acknowledgement::new(
+            1,
+            5,
+            Duration::milliseconds(0),
+            Some(Duration::milliseconds(20)),
+        ));
 
         assert!(rc.effective_bitrate().is_some());
 
@@ -151,24 +154,28 @@ mod tests {
         assert_eq!(rc.effective_bitrate().unwrap(), 8000);
 
         // The next ack's arrival time will evict the first ack because of the window
-        rc.add_ack(
-            Acknowledgement::new(2, 10, Duration::milliseconds(0))
-                .set_arrival(Duration::milliseconds(61)),
-        );
+        rc.add_ack(Acknowledgement::new(
+            2,
+            10,
+            Duration::milliseconds(0),
+            Some(Duration::milliseconds(61)),
+        ));
 
         // (15 bytes * 8 bits / byte ) / (61ms - 20ms) * 1000 = 2926 bits/s
         assert_eq!(rc.effective_bitrate().unwrap(), 2926);
 
         // Adding an ACK without any arrival time will cause effective_bitrate to return None
-        rc.add_ack(Acknowledgement::new(3, 10, Duration::milliseconds(0)));
+        rc.add_ack(Acknowledgement::new(3, 10, Duration::milliseconds(0), None));
 
         assert!(rc.effective_bitrate().is_none());
 
         // Adding an ACK with an arrival time after will still take into account the Ack that previously did not contain a timestamp.
-        rc.add_ack(
-            Acknowledgement::new(4, 10, Duration::milliseconds(0))
-                .set_arrival(Duration::milliseconds(65)),
-        );
+        rc.add_ack(Acknowledgement::new(
+            4,
+            10,
+            Duration::milliseconds(0),
+            Some(Duration::milliseconds(65)),
+        ));
 
         // (35 bytes * 8 bits / byte ) / (65ms - 20ms) * 1000 = 6222 bits/s
         assert_eq!(rc.effective_bitrate().unwrap(), 6222);
@@ -182,22 +189,26 @@ mod tests {
         });
 
         for i in 1..3 {
-            rc.add_ack(Acknowledgement::new(i, 5, Duration::milliseconds(0)));
+            rc.add_ack(Acknowledgement::new(i, 5, Duration::milliseconds(0), None));
         }
 
         assert!(rc.effective_bitrate().is_none());
 
-        rc.add_ack(
-            Acknowledgement::new(3, 10, Duration::milliseconds(0))
-                .set_arrival(Duration::milliseconds(1)),
-        );
+        rc.add_ack(Acknowledgement::new(
+            3,
+            10,
+            Duration::milliseconds(0),
+            Some(Duration::milliseconds(1)),
+        ));
 
         assert!(rc.effective_bitrate().is_none());
 
-        rc.add_ack(
-            Acknowledgement::new(4, 10, Duration::milliseconds(0))
-                .set_arrival(Duration::milliseconds(2)),
-        );
+        rc.add_ack(Acknowledgement::new(
+            4,
+            10,
+            Duration::milliseconds(0),
+            Some(Duration::milliseconds(2)),
+        ));
 
         // (20 * 8) / 1 * 1000 =  160,000
 
@@ -211,17 +222,21 @@ mod tests {
             max_count: 30,
         });
 
-        rc.add_ack(
-            Acknowledgement::new(1, 10, Duration::milliseconds(0))
-                .set_arrival(Duration::milliseconds(1)),
-        );
+        rc.add_ack(Acknowledgement::new(
+            1,
+            10,
+            Duration::milliseconds(0),
+            Some(Duration::milliseconds(1)),
+        ));
 
         assert!(rc.effective_bitrate().is_none());
 
-        rc.add_ack(
-            Acknowledgement::new(2, 10, Duration::milliseconds(0))
-                .set_arrival(Duration::milliseconds(1)),
-        );
+        rc.add_ack(Acknowledgement::new(
+            2,
+            10,
+            Duration::milliseconds(0),
+            Some(Duration::milliseconds(1)),
+        ));
 
         // Can't divide by zero so we return None
         assert!(rc.effective_bitrate().is_none());
@@ -234,12 +249,12 @@ mod tests {
             max_count: 3,
         });
 
-        rc.add_ack(Acknowledgement::new(1, 10, Duration::milliseconds(0)));
-        rc.add_ack(Acknowledgement::new(2, 10, Duration::milliseconds(0)));
-        rc.add_ack(Acknowledgement::new(3, 10, Duration::milliseconds(0)));
+        rc.add_ack(Acknowledgement::new(1, 10, Duration::milliseconds(0), None));
+        rc.add_ack(Acknowledgement::new(2, 10, Duration::milliseconds(0), None));
+        rc.add_ack(Acknowledgement::new(3, 10, Duration::milliseconds(0), None));
         assert_eq!(rc.packets.len(), 3);
 
-        rc.add_ack(Acknowledgement::new(3, 10, Duration::milliseconds(0)));
+        rc.add_ack(Acknowledgement::new(3, 10, Duration::milliseconds(0), None));
         assert_eq!(rc.packets.len(), 3);
     }
 }

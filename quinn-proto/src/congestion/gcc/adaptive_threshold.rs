@@ -11,6 +11,9 @@ const K_D: f64 = 0.00018;
 const MIN_THRESHOLD: Duration = Duration::milliseconds(6);
 const MAX_THRESHOLD: Duration = Duration::milliseconds(600);
 
+const INITIAL_DEL_VAR_TH: Duration = Duration::microseconds(12500);
+
+#[derive(Clone)]
 pub(crate) struct AdaptiveThreshold {
     threshold: Duration,
     overuse_coeff_up: f64,
@@ -22,6 +25,19 @@ pub(crate) struct AdaptiveThreshold {
 }
 
 impl AdaptiveThreshold {
+    pub(crate) fn new() -> Self {
+        Self {
+            threshold: INITIAL_DEL_VAR_TH,
+            overuse_coeff_down: K_D,
+            overuse_coeff_up: K_U,
+            min: MIN_THRESHOLD,
+            max: MAX_THRESHOLD,
+            last_update: None,
+            num_deltas: 0,
+        }
+    }
+
+    //
     pub(crate) fn compare_threshold(
         &mut self,
         estimate: Duration,
@@ -48,7 +64,7 @@ impl AdaptiveThreshold {
             NetworkUsage::Normal
         };
 
-        self.update_threshold(estimate, now);
+        self.update_threshold(amplified_estimate, now);
 
         (usage, amplified_estimate)
     }
@@ -88,3 +104,6 @@ impl AdaptiveThreshold {
         self.last_update = Some(now);
     }
 }
+
+#[cfg(test)]
+mod tests {}
