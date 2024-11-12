@@ -35,6 +35,7 @@ slab = { workspace = true }
 thiserror = { workspace= true }
 tinyvec = { workspace = true, features = ["alloc"] }
 tracing = { workspace = true }
+time = "0.3.36"
 
 [dev-dependencies]
 assert_matches = { workspace = true }
