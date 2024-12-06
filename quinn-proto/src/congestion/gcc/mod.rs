@@ -9,9 +9,11 @@ mod acknowledgement;
 use acknowledgement::Acknowledgement;
 use delay_controller::DelayController;
 use loss_controller::{LossController, LossControllerConfig};
+use overuse_detector::NetworkUsage;
 use rate_calculator::{RateCalculator, RateCalculatorConfig};
 
-use tracing::warn;
+use rate_controller::State;
+use tracing::{trace, trace_span, warn};
 
 mod adaptive_threshold;
 
@@ -30,7 +32,12 @@ mod loss_controller;
 mod prefilter;
 
 pub(crate) type Bitrate = u32;
-pub(crate) const DEFAULT_INITIAL_BITRATE: Bitrate = 2_048_000; // 10 kbps
+
+fn human_kbits<T: Into<f64>>(bits: T) -> String {
+    format!("{:.2}kb", (bits.into() / 1_000.))
+}
+
+pub(crate) const DEFAULT_INITIAL_BITRATE: Bitrate = 250_000; // 10 kbps
 pub(crate) const DEFAULT_MIN_BITRATE: Bitrate = 5_000;
 pub(crate) const DEFAULT_MAX_BITRATE: Bitrate = 1_000_000_000; // 1 Gbps
 
@@ -49,32 +56,34 @@ pub struct Gcc {
     loss_controller: LossController,
     delay_controller: DelayController,
 
-    next_pn: u64,
+    last_pn: u64,
     epoch: Instant,
 
     mtu: u16,
     window: u64,
     last_update: Instant,
 
-    estimated_bitrate: Bitrate,
+    target_bitrate: Bitrate,
     delay_bitrate: Bitrate,
     loss_bitrate: Bitrate,
+    report_stats: bool,
 }
 
 impl Gcc {
-    fn new(mtu: u16, now: Instant) -> Self {
+    fn new(mtu: u16, now: Instant, report_stats: bool) -> Self {
         Self {
             mtu,
-            next_pn: 0,
+            last_pn: 0,
             rate_calculator: RateCalculator::new(RateCalculatorConfig::default()),
             loss_controller: LossController::new(now, LossControllerConfig::default()),
             delay_controller: DelayController::new(),
             epoch: now,
-            estimated_bitrate: DEFAULT_INITIAL_BITRATE,
+            target_bitrate: DEFAULT_INITIAL_BITRATE,
             delay_bitrate: DEFAULT_INITIAL_BITRATE,
             loss_bitrate: DEFAULT_INITIAL_BITRATE,
             last_update: now,
             window: INITIAL_WINDOW,
+            report_stats,
         }
     }
 
@@ -94,12 +103,31 @@ impl Gcc {
         let target_bitrate = Bitrate::min(self.delay_bitrate, self.loss_bitrate)
             .clamp(DEFAULT_MIN_BITRATE, DEFAULT_MAX_BITRATE);
 
-        self.estimated_bitrate = target_bitrate;
+        self.target_bitrate = target_bitrate;
     }
 
     fn calculate_window(target_bitrate: Bitrate, rtt: Duration) -> u64 {
         // The window is the number of packets allowed in flight.
         ((target_bitrate as f32 * rtt.as_secs_f32()) as f32) as u64
+    }
+
+    fn stats(&self) -> Stats {
+        Stats {
+            delay_ctrl_network_usage: self.delay_controller.get_usage(),
+            delay_ctrl_state: self.delay_controller.get_state(),
+            delay_ctrl_bitrate: self.delay_controller.get_target_bitrate(),
+            loss_ctrl_bitrate: self.loss_controller.get_bitrate(),
+            loss_ctrl_packet_loss: self.loss_controller.get_loss_ratio(),
+            loss_ctrl_avg_loss: self.loss_controller.get_average_loss(),
+            window: self.window,
+            last_pn: self.last_pn,
+            effective_bitrate: self.rate_calculator.effective_bitrate(),
+            gcc_estimated_bitrate: self.target_bitrate,
+        }
+    }
+
+    pub fn target_bitrate(&self) -> Bitrate {
+        self.target_bitrate
     }
 }
 
@@ -109,7 +137,8 @@ impl Controller for Gcc {
     }
 
     fn window(&self) -> u64 {
-        self.window.max(3 * self.mtu as u64)
+        let ret = self.window.max(3 * self.mtu as u64);
+        ret
     }
 
     fn clone_box(&self) -> Box<dyn Controller> {
@@ -126,11 +155,12 @@ impl Controller for Gcc {
 
     fn on_congestion_event(
         &mut self,
-        now: std::time::Instant,
-        sent: std::time::Instant,
-        is_persistent_congestion: bool,
+        _now: Instant,
+        _sent: Instant,
+        _is_persistent_congestion: bool,
         lost_bytes: u64,
     ) {
+        self.loss_controller.add_bytes_lost(lost_bytes);
     }
 
     fn on_ack_timestamped(
@@ -143,9 +173,8 @@ impl Controller for Gcc {
         _app_limited: bool,
         rtt: &crate::RttEstimator,
     ) {
-        // pn can be repeated
-        // pn can be out of order
-        if pn < self.next_pn {
+        // pn can be repeated or out of order
+        if pn <= self.last_pn {
             return;
         }
 
@@ -182,42 +211,87 @@ impl Controller for Gcc {
             rtt.get(),
             now,
         ) {
-            println!("delay estimate: bitrate: {}", delay_estimate);
+            trace!(delay_estimate, "delay estimate: bitrate");
             self.set_bitrate(delay_estimate, ControllerType::Delay);
         }
 
-        if let Some(loss_estimate) = self.loss_controller.update_loss_estimate(ack, now) {
-            println!("loss estimate: bitrate: {}", loss_estimate);
+        if let Some(loss_estimate) = self.loss_controller.calculate_loss_estimate(now) {
+            //trace!(loss_estimate, "loss estimate: bitrate");
             self.set_bitrate(loss_estimate, ControllerType::Loss)
         }
 
-        self.window = Self::calculate_window(self.estimated_bitrate, rtt.get());
-        println!(
-            "calculating --> mtu: {}, target_bitrate: {}, rtt: {:?}s, window: {}",
-            self.mtu,
-            self.estimated_bitrate,
-            rtt.get().as_secs_f32(),
-            self.window
-        );
+        self.loss_controller.add_bytes_acked(bytes);
 
-        self.next_pn = pn + 1;
+        self.window = Self::calculate_window(self.target_bitrate, rtt.get());
+
+        if false {
+            trace!(
+                target_bitrate = self.target_bitrate,
+                effective_bitrate = self.rate_calculator.effective_bitrate(),
+                window = self.window,
+                rtt = rtt.get().as_secs_f32(),
+                "gcc output calculation",
+            );
+        }
+
+        self.last_pn = pn;
         self.last_update = now;
+        if true && self.report_stats {
+            let stats = self.stats();
+            let packet_loss = if stats.loss_ctrl_packet_loss.is_none() {
+                0.
+            } else {
+                stats.loss_ctrl_packet_loss.unwrap()
+            };
+            let _span = trace_span!("stats").entered();
+            trace!(
+                usage = stats.delay_ctrl_network_usage.string(),
+                state = stats.delay_ctrl_state.string(),
+                //delay_ctrl_bitrate = stats.delay_ctrl_bitrate,
+                //loss_ctrl_bitrate = stats.loss_ctrl_bitrate,
+                //loss_ctrl_packet_loss = packet_loss,
+                //loss_ctrl_avg_loss = stats.loss_ctrl_avg_loss,
+                window = stats.window,
+                rtt = rtt.get().as_millis(),
+                //last_pn = stats.last_pn,
+                measurement = stats.effective_bitrate.map(|v| human_kbits(v)),
+                estimate = human_kbits(stats.gcc_estimated_bitrate),
+            );
+        }
     }
 }
 
 /// GccConfig is the factory to produce GCC instances.
-pub struct GccConfig {}
+pub struct GccConfig {
+    report_stats: bool,
+}
 
 impl GccConfig {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(report_stats: bool) -> Self {
+        Self { report_stats }
     }
 }
 
 impl ControllerFactory for GccConfig {
     fn build(self: Arc<Self>, now: Instant, current_mtu: u16) -> Box<dyn Controller> {
-        Box::new(Gcc::new(current_mtu, now))
+        Box::new(Gcc::new(current_mtu, now, self.report_stats))
     }
+}
+
+#[derive(Debug, Clone)]
+struct Stats {
+    delay_ctrl_network_usage: NetworkUsage,
+    delay_ctrl_state: State,
+    delay_ctrl_bitrate: Bitrate,
+
+    loss_ctrl_bitrate: Bitrate,
+    loss_ctrl_packet_loss: Option<f64>,
+    loss_ctrl_avg_loss: f64,
+
+    window: u64,
+    last_pn: u64,
+    effective_bitrate: Option<Bitrate>,
+    gcc_estimated_bitrate: Bitrate,
 }
 
 #[cfg(test)]

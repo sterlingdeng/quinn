@@ -657,7 +657,13 @@ impl Connection {
                         congestion_blocked = true;
                         // We continue instead of breaking here in order to avoid
                         // blocking loss probes queued for higher spaces.
-                        trace!("blocked by congestion control");
+                        trace!(
+                            in_flight = self.path.in_flight.bytes,
+                            bytes_to_send = bytes_to_send,
+                            window = self.path.congestion.window(),
+                            space_idx = space_idx,
+                            "blocked by congestion control"
+                        );
                         continue;
                     }
 
@@ -1597,6 +1603,7 @@ impl Connection {
     }
 
     fn detect_lost_packets(&mut self, now: Instant, pn_space: SpaceId, due_to_ack: bool) {
+        let _span = trace_span!("detect_lost_packets").entered();
         let mut lost_packets = Vec::<u64>::new();
         let mut lost_mtu_probe = None;
         let in_flight_mtu_probe = self.path.mtud.in_flight_mtu_probe();
@@ -1668,6 +1675,12 @@ impl Connection {
             prev_packet = Some(packet);
         }
 
+        trace!(
+            "sd: packets lost: {:?}, bytes lost: {}",
+            lost_packets,
+            size_of_lost_packets
+        );
+
         // OnPacketsLost
         if let Some(largest_lost) = lost_packets.last().cloned() {
             let old_bytes_in_flight = self.path.in_flight.bytes;
@@ -1675,11 +1688,6 @@ impl Connection {
             self.lost_packets += lost_packets.len() as u64;
             self.stats.path.lost_packets += lost_packets.len() as u64;
             self.stats.path.lost_bytes += size_of_lost_packets;
-            trace!(
-                "packets lost: {:?}, bytes lost: {}",
-                lost_packets,
-                size_of_lost_packets
-            );
 
             for &packet in &lost_packets {
                 let info = self.spaces[pn_space].take(packet).unwrap(); // safe: lost_packets is populated just above
@@ -1704,6 +1712,7 @@ impl Connection {
             // Don't apply congestion penalty for lost ack-only packets
             let lost_ack_eliciting = old_bytes_in_flight != self.path.in_flight.bytes;
 
+            trace!("lost_ack_eliciting {}", lost_ack_eliciting);
             if lost_ack_eliciting {
                 self.stats.path.congestion_events += 1;
                 self.path.congestion.on_congestion_event(

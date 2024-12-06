@@ -53,14 +53,22 @@ impl DelayController {
         };
 
         self.arrival_filter.update_estimate(measurement);
-        let estimated_bitrate = self.arrival_filter.get_estimate();
+        let estimated_delay = self.arrival_filter.get_estimate();
 
-        let network_usage = self
-            .overuse_detector
-            .process_estimate(estimated_bitrate, now);
+        let network_usage = self.overuse_detector.process_estimate(estimated_delay, now);
+        /*
+        trace!(
+            measurement_ms = measurement.whole_microseconds(),
+            estimated_delay_ms = estimated_delay.whole_microseconds(),
+            ?network_usage
+        );
+        */
 
-        self.rate_controller
-            .update(effective_bitrate, network_usage, rtt, now)
+        let ret = self
+            .rate_controller
+            .update(effective_bitrate, network_usage, rtt, now);
+
+        ret
     }
 
     pub(crate) fn get_target_bitrate(&self) -> Bitrate {
@@ -71,7 +79,7 @@ impl DelayController {
         self.rate_controller.state()
     }
 
-    pub(crate) fn usage(&self) -> NetworkUsage {
+    pub(crate) fn get_usage(&self) -> NetworkUsage {
         self.overuse_detector.get_usage()
     }
 }

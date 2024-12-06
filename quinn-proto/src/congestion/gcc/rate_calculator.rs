@@ -92,7 +92,6 @@ impl RateCalculator {
         if self.packets.len() <= 1 {
             return None;
         }
-        println!("size.bytes: {}", self.size_bytes);
 
         // Unwrap safety 1: Checked if empty above
         // Unwrap safety 2: The front is guaranteed to contain an arrival.

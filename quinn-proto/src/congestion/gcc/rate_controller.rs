@@ -4,6 +4,8 @@ use crate::congestion::gcc::{
 
 use std::time::{Duration, Instant};
 
+use tracing::trace;
+
 // Minimal duration between 2 updates on the lost based rate controller
 const DELAY_UPDATE_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -17,23 +19,11 @@ pub(crate) enum State {
 }
 
 impl State {
-    fn transition(&mut self, signal: NetworkUsage) {
-        *self = match *self {
-            Self::Increase => match signal {
-                NetworkUsage::Over => State::Decrease,
-                NetworkUsage::Normal => *self,
-                NetworkUsage::Under => State::Hold,
-            },
-            Self::Decrease => match signal {
-                NetworkUsage::Over => *self,
-                NetworkUsage::Normal => State::Hold,
-                NetworkUsage::Under => State::Hold,
-            },
-            Self::Hold => match signal {
-                NetworkUsage::Over => State::Decrease,
-                NetworkUsage::Normal => *self,
-                NetworkUsage::Under => State::Increase,
-            },
+    pub(crate) fn string(&self) -> String {
+        match self {
+            State::Hold => String::from("hold"),
+            State::Increase => String::from("increase"),
+            State::Decrease => String::from("decrease"),
         }
     }
 }
@@ -83,7 +73,7 @@ impl RateController {
         match self.calculate_bitrate(effective_bitrate.unwrap(), usage, rtt, now) {
             Some(bitrate) => {
                 self.set_target_bitrate(bitrate);
-                Some(self.target_bitrate())
+                Some(bitrate)
             }
             None => None,
         }
@@ -97,7 +87,6 @@ impl RateController {
         rtt: Duration,
         now: Instant,
     ) -> Option<Bitrate> {
-        println!("usage: {:?}, state: {:?}", usage, self.state);
         match usage {
             NetworkUsage::Normal => match self.state {
                 State::Increase | State::Hold => {
@@ -133,7 +122,7 @@ impl RateController {
     }
 
     fn compute_decreased_rate(&self, effective_bitrate: Bitrate) -> Bitrate {
-        println!("CIR: decrease");
+        trace!("rate controller decrease");
         let target = BETA * effective_bitrate as f64;
         target as Bitrate
     }
@@ -144,10 +133,6 @@ impl RateController {
         rtt: Duration,
         now: Instant,
     ) -> Option<Bitrate> {
-        println!(
-            "compute_increased_rate: effective bitrate: {}",
-            effective_bitrate
-        );
         let time_since_last_update_ms = match self.last_increase_time {
             None => 0.,
             Some(prev) => {
@@ -165,7 +150,7 @@ impl RateController {
             .latest_decrease_rate_ema
             .estimate_is_close(effective_bitrate.into())
         {
-            println!("CIR: additive increase");
+            //trace!("CIR: additive increase");
             // Additive increase
             let bits_per_frame = self.target as f64 / 30.0; // 30 frames per second
             let packets_per_frame = f64::ceil(bits_per_frame / (1200. * 8.));
@@ -186,16 +171,28 @@ impl RateController {
             return Some((self.target as f64 + increase) as Bitrate);
         } else {
             // Multiplicative increase
-            println!("CIR: multiplicative increase");
             let eta = 1.08_f64.powf(f64::min(time_since_last_update_ms / 1000., 1.0));
             let new_rate = eta * self.target as f64;
             let max = 1.5 * effective_bitrate as f64;
 
+            /*
+            trace!(
+                effective_bitrate,
+                eta,
+                new_rate,
+                max,
+                self.target,
+                "CIR: multiplicative increase"
+            );
+            */
+
             if new_rate > max && new_rate > self.target as f64 {
+                //trace!(max, effective_bitrate, "setting max");
                 Some(max as Bitrate)
             } else if new_rate < self.target as f64 {
                 None
             } else {
+                //trace!(new_rate, "using new_rate");
                 Some(new_rate as Bitrate)
             }
         }

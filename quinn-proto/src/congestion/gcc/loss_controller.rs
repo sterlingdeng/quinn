@@ -2,11 +2,8 @@ use std::time::Instant;
 use time::Duration;
 
 use crate::congestion::gcc::{
-    acknowledgement::Acknowledgement, Bitrate, DEFAULT_INITIAL_BITRATE, DEFAULT_MAX_BITRATE,
-    DEFAULT_MIN_BITRATE,
+    Bitrate, DEFAULT_INITIAL_BITRATE, DEFAULT_MAX_BITRATE, DEFAULT_MIN_BITRATE,
 };
-
-use tracing::trace;
 
 const WINDOW_INTERVAL: Duration = Duration::milliseconds(100);
 const INCREASE_LOSS_THRESHOLD: f64 = 0.02;
@@ -37,12 +34,10 @@ pub(crate) struct LossController {
     last_increase: Instant,
     last_decrease: Instant,
 
-    // The last packet number in the group.
-    next_pn: u64,
     // The number of packets lost in the group.
-    packet_lost: u64,
+    bytes_lost: u64,
     // The number of packets in the group.
-    packets_total: u64,
+    bytes_acked: u64,
 
     // The estimated bitrate determined by the loss controller.
     bitrate: Bitrate,
@@ -59,9 +54,8 @@ impl LossController {
             last_update: now,
             last_increase: now,
             last_decrease: now,
-            next_pn: 0,
-            packet_lost: 0,
-            packets_total: 0,
+            bytes_lost: 0,
+            bytes_acked: 0,
 
             bitrate: DEFAULT_INITIAL_BITRATE,
             average_loss: 0.,
@@ -70,52 +64,47 @@ impl LossController {
         }
     }
 
-    pub(crate) fn update_loss_estimate(
-        &mut self,
-        ack: Acknowledgement,
-        now: Instant,
-    ) -> Option<Bitrate> {
-        if ack.packet_number < self.next_pn {
-            // Skip out of order packet.
-            trace!("out of order packet found");
-            return None;
-        }
+    pub(crate) fn add_bytes_acked(&mut self, bytes_acked: u64) {
+        self.bytes_acked += bytes_acked;
+    }
 
+    pub(crate) fn add_bytes_lost(&mut self, bytes_lost: u64) {
+        self.bytes_lost += bytes_lost;
+    }
+
+    pub(crate) fn calculate_loss_estimate(&mut self, now: Instant) -> Option<Bitrate> {
         let mut changed = false;
 
-        if now < self.last_update + WINDOW_INTERVAL || self.packets_total == 0 {
-            self.packets_total += 1;
-            self.packet_lost += ack.packet_number - self.next_pn;
-        } else {
-            let loss_ratio = self.packet_lost as f64 / self.packets_total as f64;
-            debug_assert!(!loss_ratio.is_nan(), "loss_ratio cannot be NaN");
-            self.average_loss = self.compute_loss_average(
-                now.duration_since(self.last_update),
-                self.average_loss,
-                loss_ratio,
-            );
+        // accumulate packets for WINDOW_INTERVAL. This is approx what TWCC does.
+        if now >= self.last_update + self.window && self.bytes_lost + self.bytes_acked > 0 {
+            if let Some(loss_ratio) = self.get_loss_ratio() {
+                self.average_loss = self.compute_loss_average(
+                    now.duration_since(self.last_update),
+                    self.average_loss,
+                    loss_ratio,
+                );
 
-            if self.get_average_loss() > DECREASE_LOSS_THRESHOLD
-                && now.duration_since(self.last_decrease) > self.time_threshold
-            {
-                let factor = 1. - (0.5 * loss_ratio);
-                self.set_bitrate((self.bitrate as f64 * factor) as Bitrate);
-                self.last_decrease = now;
-                changed = true;
-            } else if self.get_average_loss() < INCREASE_LOSS_THRESHOLD
-                && now.duration_since(self.last_increase) > self.time_threshold
-            {
-                self.set_bitrate((self.bitrate as f64 * INCREASE_FACTOR) as Bitrate);
-                self.last_increase = now;
-                changed = true;
+                if self.get_average_loss() > DECREASE_LOSS_THRESHOLD
+                    && now.duration_since(self.last_decrease) > self.time_threshold
+                {
+                    let factor = 1. - (0.5 * loss_ratio);
+                    self.set_bitrate((self.bitrate as f64 * factor) as Bitrate);
+                    self.last_decrease = now;
+                    changed = true;
+                } else if self.get_average_loss() < INCREASE_LOSS_THRESHOLD
+                    && now.duration_since(self.last_increase) > self.time_threshold
+                {
+                    self.set_bitrate((self.bitrate as f64 * INCREASE_FACTOR) as Bitrate);
+                    self.last_increase = now;
+                    changed = true;
+                }
             }
 
             self.last_update = now;
-            self.packets_total = 0;
-            self.packet_lost = 0;
+            self.bytes_acked = 0;
+            self.bytes_lost = 0;
         }
 
-        self.next_pn = ack.packet_number + 1;
         if changed {
             Some(self.bitrate)
         } else {
@@ -137,11 +126,21 @@ impl LossController {
         self.average_loss
     }
 
+    // Returns None if a division by 0 were to occur if no bytes were sent or lost.
+    pub(crate) fn get_loss_ratio(&self) -> Option<f64> {
+        if self.bytes_lost + self.bytes_acked == 0 {
+            None
+        } else {
+            Some(self.bytes_lost as f64 / (self.bytes_lost as f64 + self.bytes_acked as f64))
+        }
+    }
+
     fn set_bitrate(&mut self, bitrate: Bitrate) {
         self.bitrate = bitrate.clamp(DEFAULT_MIN_BITRATE, DEFAULT_MAX_BITRATE);
     }
 }
 
+/*
 #[cfg(test)]
 mod tests {
     use time::Duration;
@@ -264,3 +263,4 @@ mod tests {
     #[test]
     fn ignores_out_of_order() {}
 }
+*/

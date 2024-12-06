@@ -869,7 +869,7 @@ impl PacketNumberFilter {
             return n;
         }
 
-        trace!("skipping pn {n}");
+        trace!("sd: skipping pn {n}");
         // Skip this packet number, and choose the next one to skip
         self.prev_skipped_packet_number = Some(self.next_skipped_packet_number);
         let next_exponent = self.exponent.saturating_add(1);

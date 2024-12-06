@@ -2,6 +2,7 @@ use crate::congestion::gcc::overuse_detector::NetworkUsage;
 use std::time::Instant;
 
 use time::Duration;
+use tracing::trace;
 
 // From Table 1 Recommended Values
 const K_U: f64 = 0.01;
@@ -55,6 +56,13 @@ impl AdaptiveThreshold {
         let amplified_estimate = Duration::nanoseconds(
             estimate.whole_nanoseconds() as i64 * i64::min(self.num_deltas, MAX_DELTAS),
         );
+
+        /*
+        trace!(
+            amplified_estimate = amplified_estimate.whole_microseconds(),
+            threshold = self.threshold.whole_microseconds()
+        );
+        */
 
         let usage = if amplified_estimate > self.threshold {
             NetworkUsage::Over
