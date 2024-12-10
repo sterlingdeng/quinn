@@ -213,8 +213,8 @@ impl Controller for Gcc {
         };
 
         let ack = Acknowledgement::new(pn, bytes, departure, arrival);
-
         self.rate_calculator.add_ack(ack);
+
         if let Some(delay_estimate) = self.delay_controller.process_packet(
             ack,
             self.rate_calculator.effective_bitrate(),
@@ -268,6 +268,10 @@ impl Controller for Gcc {
                 estimate = human_kbits(stats.gcc_estimated_bitrate),
                 overuse_detector_estimate = stats.overuse_detector_estimate,
                 overuse_detector_threshold = stats.overuse_detector_threshold,
+                idv = self
+                    .delay_controller
+                    .last_inter_delay_variation
+                    .whole_milliseconds(),
             );
         }
     }

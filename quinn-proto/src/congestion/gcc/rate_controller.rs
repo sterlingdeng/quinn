@@ -109,8 +109,9 @@ impl RateController {
                     let new_bitrate = self.compute_decreased_rate(effective_bitrate);
                     self.latest_decrease_rate_ema
                         .update(effective_bitrate as f64);
-                    self.state = State::Decrease;
                     self.last_decrease_time = now;
+
+                    self.state = State::Decrease;
                     return Some(new_bitrate);
                 }
             }
@@ -150,7 +151,6 @@ impl RateController {
             .latest_decrease_rate_ema
             .estimate_is_close(effective_bitrate.into())
         {
-            //trace!("CIR: additive increase");
             // Additive increase
             let bits_per_frame = self.target as f64 / 30.0; // 30 frames per second
             let packets_per_frame = f64::ceil(bits_per_frame / (1200. * 8.));
@@ -159,6 +159,7 @@ impl RateController {
             let rtt_ms = rtt.as_millis() as f64;
             let response_time_ms = 100. + rtt_ms;
             let alpha = 0.5 * f64::min(1.0, time_since_last_update_ms / response_time_ms);
+
             let threshold_on_effective_bitrate = 1.5 * effective_bitrate as f64;
             let increase = f64::max(
                 1000.,
@@ -187,7 +188,6 @@ impl RateController {
             */
 
             if new_rate > max && new_rate > self.target as f64 {
-                //trace!(max, effective_bitrate, "setting max");
                 Some(max as Bitrate)
             } else if new_rate < self.target as f64 {
                 None

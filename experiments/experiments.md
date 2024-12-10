@@ -22,7 +22,7 @@ A traffic shaper is used to control certain aspects of the network, such as link
 
 ### Static Interval Above Link Capacity
 
-Interval: 6ms -> 1333 kbps
+Interval: 7ms -> 1142 kbps
 ![image](./static_above.png)
 
 Outflow is limited by Quinn's congestion control window. Notice the window size compared to others.

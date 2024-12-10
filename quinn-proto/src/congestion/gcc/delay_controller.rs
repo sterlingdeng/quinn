@@ -20,6 +20,8 @@ pub(crate) struct DelayController {
     arrival_filter: Kalman,
     pub overuse_detector: OveruseDetector,
     rate_controller: RateController,
+
+    pub last_inter_delay_variation: time::Duration,
 }
 
 impl DelayController {
@@ -29,6 +31,7 @@ impl DelayController {
             arrival_filter: Kalman::new(KalmanConfig::default()),
             overuse_detector: OveruseDetector::new(AdaptiveThreshold::new()),
             rate_controller: RateController::new(),
+            last_inter_delay_variation: time::Duration::ZERO,
         }
     }
 
@@ -44,15 +47,16 @@ impl DelayController {
             Some(v) => v,
         };
 
-        let measurement = match packet_group_pair.inter_delay_variation() {
+        let inter_delay_variation = match packet_group_pair.inter_delay_variation() {
             None => {
                 trace!("measurement is none");
                 return None;
             }
             Some(v) => v,
         };
+        self.last_inter_delay_variation = inter_delay_variation;
 
-        self.arrival_filter.update_estimate(measurement);
+        self.arrival_filter.update_estimate(inter_delay_variation);
         let estimated_delay = self.arrival_filter.get_estimate();
 
         let network_usage = self.overuse_detector.process_estimate(estimated_delay, now);

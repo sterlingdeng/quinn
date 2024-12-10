@@ -19,8 +19,8 @@ impl PacketGroup {
     pub(crate) fn inter_group_delay_variation(&self, other: &Self) -> Option<Duration> {
         if other.arrival.is_some() && self.arrival.is_some() {
             Some(
-                (other.arrival.unwrap() - self.arrival.unwrap())
-                    - (other.departure - self.departure),
+                (self.arrival.unwrap() - other.arrival.unwrap())
+                    - (self.departure - other.departure),
             )
         } else {
             None

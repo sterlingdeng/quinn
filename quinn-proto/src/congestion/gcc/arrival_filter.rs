@@ -26,7 +26,7 @@ impl Default for KalmanConfig {
 #[derive(Clone)]
 pub(crate) struct Kalman {
     gain: f64,
-    estimate: Duration,
+    estimate: Duration, // e(i-1)
     process_uncertainty: f64,
     estimate_error: f64,
     measurement_uncertainty: f64,
@@ -46,6 +46,7 @@ impl Kalman {
     pub(crate) fn update_estimate(&mut self, measurement: Duration) {
         let z = measurement - self.estimate;
         let zms = z.whole_microseconds() as f64 / 1000.0;
+
         let alpha = (1.0 - CHI).powf(30.0 / (1000. * 5. * 1_000_000.));
         let root = self.measurement_uncertainty.sqrt();
         let root3 = 3. * root;
