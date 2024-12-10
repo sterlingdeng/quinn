@@ -15,8 +15,9 @@ use std::{error::Error, net::SocketAddr, sync::Arc};
 pub fn make_client_endpoint(
     bind_addr: SocketAddr,
     server_certs: &[&[u8]],
+    cc_factory: Arc<dyn proto::congestion::ControllerFactory + Send + Sync + 'static>,
 ) -> Result<Endpoint, Box<dyn Error + Send + Sync + 'static>> {
-    let client_cfg = configure_client(server_certs)?;
+    let client_cfg = configure_client(server_certs, cc_factory)?;
     let mut endpoint = Endpoint::client(bind_addr)?;
     endpoint.set_default_client_config(client_cfg);
     Ok(endpoint)
@@ -45,13 +46,21 @@ pub fn make_server_endpoint(
 /// - server_certs: a list of trusted certificates in DER format.
 fn configure_client(
     server_certs: &[&[u8]],
+    cc_factory: Arc<dyn proto::congestion::ControllerFactory + Send + Sync + 'static>,
 ) -> Result<ClientConfig, Box<dyn Error + Send + Sync + 'static>> {
     let mut certs = rustls::RootCertStore::empty();
     for cert in server_certs {
         certs.add(CertificateDer::from(*cert))?;
     }
 
-    Ok(ClientConfig::with_root_certificates(Arc::new(certs))?)
+    let mut cfg = ClientConfig::with_root_certificates(Arc::new(certs))?;
+    let mut transport_config = proto::TransportConfig::default();
+    transport_config.max_ack_timestamps(20_u32.into());
+    transport_config.congestion_controller_factory(cc_factory);
+
+    cfg.transport_config(Arc::new(transport_config));
+
+    Ok(cfg)
 }
 
 /// Returns default server configuration along with its certificate.
@@ -65,6 +74,8 @@ fn configure_server(
         ServerConfig::with_single_cert(vec![cert_der.clone()], priv_key.into())?;
     let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
     transport_config.max_concurrent_uni_streams(0_u8.into());
+    transport_config.max_ack_timestamps(20_u32.into());
+    // transport_config.congestion_controller_factory(Arc::new(GccConfig::new(true)));
 
     Ok((server_config, cert_der))
 }

@@ -37,7 +37,7 @@ fn human_kbits<T: Into<f64>>(bits: T) -> String {
     format!("{:.2}kb", (bits.into() / 1_000.))
 }
 
-pub(crate) const DEFAULT_INITIAL_BITRATE: Bitrate = 250_000; // 10 kbps
+pub(crate) const DEFAULT_INITIAL_BITRATE: Bitrate = 750_000; // 10 kbps
 pub(crate) const DEFAULT_MIN_BITRATE: Bitrate = 5_000;
 pub(crate) const DEFAULT_MAX_BITRATE: Bitrate = 1_000_000_000; // 1 Gbps
 

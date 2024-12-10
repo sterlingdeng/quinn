@@ -23,6 +23,9 @@ A traffic shaper is used to control certain aspects of the network, such as link
 ### Static Interval Above Link Capacity
 
 Interval: 7ms -> 1142 kbps
+1000 kbps capacity
+0% packet loss
+50 ms delay
 ![image](./static_above.png)
 
 Outflow is limited by Quinn's congestion control window. Notice the window size compared to others.
@@ -30,13 +33,32 @@ Outflow is limited by Quinn's congestion control window. Notice the window size 
 ### Static Interval At Capacity
 
 Interval: 8ms -> 1000 kpbs
+1000 kbps capacity
+0% packet loss
+50 ms delay
 ![image](./at_capacity.png)
 
 ### Static Interval Below Link Capacity
 
 Interval: 10ms -> 800 kbps
+1000 kbps capacity
+0% packet loss
+50 ms delay
 ![image](./static_under.png)
 
 ### Dynamic Interval
 
+1000 kbps capacity
+0% packet loss
+50 ms delay
+
 ![image](./dynamic_interval.png)
+
+## References
+
+- [GCC Analysis](https://c3lab.poliba.it/images/6/65/Gcc-analysis.pdf)
+- [ACK timestamp draft](https://www.ietf.org/archive/id/draft-smith-quic-receive-ts-00.html)
+- [GCC](https://datatracker.ietf.org/doc/html/draft-ietf-rmcat-gcc-02)
+- [QUIC Datagram RFC](https://datatracker.ietf.org/doc/html/rfc9221)
+- [QUIC recovery](https://datatracker.ietf.org/doc/html/draft-ietf-quic-recovery-34)
+- [QUIC rfc](https://datatracker.ietf.org/doc/html/rfc9000)

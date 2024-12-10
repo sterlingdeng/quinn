@@ -1,0 +1,17 @@
+{
+  "config": {
+    "device": "eth0",
+    "latency_ms": 250,
+    "target-bw": 1000,
+    "packet-loss": 0,
+    "target-addr": "",
+    "target-proto": "udp",
+    "target-port": "9000"
+  },
+  "timeline": [
+    { "t": "0s", "packet-loss": 10, "latency": 10, "kind": "step" },
+    { "t": "2s", "packet-loss": 10, "latency": 10, "kind": "step" },
+    { "t": "4s", "packet-loss": 10, "latency": 10, "kind": "step" },
+    { "t": "8s", "packet-loss": 10, "latency": 10, "kind": "step" }
+  ]
+}

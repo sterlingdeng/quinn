@@ -1,0 +1,43 @@
+{
+    "config": {
+        "packet_loss": 0,
+        "latency": 50,
+        "bandwidth": 10000000,
+        "protocol": "udp",
+        "src_ports": [20001, 20001],
+        "dst_ports": [20002, 20002],
+        "report_output": {
+            "file": {
+                "path": "./output.log"
+            }
+        }
+    },
+    "events": [
+        {
+            "time": 1,
+            "packet_loss": 0,
+            "latency": 10,
+            "bandwidth": 10000000
+        },
+        {
+            "time": 30,
+            "packet_loss": 7,
+            "latency": 200,
+            "bandwidth": 10000000
+        },
+        {
+            "time": 60,
+            "packet_loss": 5,
+            "latency": 100,
+            "bandwidth": 10000000
+        },
+        {
+            "time": 70,
+            "packet_loss": 5,
+            "latency": 200,
+            "bandwidth": 10000000
+        }
+    ]
+}
+
+
