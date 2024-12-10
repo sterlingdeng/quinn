@@ -39,7 +39,7 @@ def run():
             data = json.loads(line)
             timestamp = data["timestamp"]
             # Only render every 10th data point
-            if i % 10 != 0:
+            if i % 2 != 0:
                 continue
 
             fields = data["fields"]
@@ -86,13 +86,13 @@ def run():
             idvs.append(int(fields["idv"]))
 
 
-    PLOT_ROWS=6
+    PLOT_ROWS=4
     PLOT_COLS=1
 
     # Capacity and bitrate plot
     ax = plt.subplot(PLOT_ROWS, PLOT_COLS, 1)
     ax.set_ylabel("kbps")
-    measurement_handle, = ax.plot(time, measurements, label='measurements')
+    measurement_handle, = ax.plot(time, measurements, label='measured bitrate')
     estimate_handle, = ax.plot(time, estimates, label='gcc estimates')
     cap_handle = plt.axhline(y=1000, label='capacity', color='black', linestyle='--')
 
@@ -101,7 +101,7 @@ def run():
     cwnd_ax.set_ylabel("bytes")
     #cwnd_ax.set_ylim(2_000, 500_000)
 
-    ax.legend(handles=[measurement_handle, estimate_handle, cwnd_handle, cap_handle], loc="upper left")
+    ax.legend(handles=[measurement_handle, estimate_handle, cwnd_handle, cap_handle], loc="lower left")
     ax.plot()
 
 
@@ -122,20 +122,24 @@ def run():
     ax.plot(time, overuse_detector_thresholds, label='γ(ti)')
     ax.plot(time, overuse_detector_estimates, label='m(ti)')
     ax.plot(time, list(map(lambda x: -x, overuse_detector_thresholds)), label='-γ(ti)')
-    ax.legend(loc="best")
     ax.set_title(label='Adaptive Threshold Internals')
     for i, usage in enumerate(usages):
         if i > 0:
+            label = 'Normal'
             color = 'honeydew'
             if usage == OVER:
                 color = 'lightpink'
+                label = 'Overuse'
             elif usage == UNDER:
                 color  = 'lightsteelblue'
+                label = 'Underuse'
             ax.axvspan(time[i-1], time[i], facecolor=color)
 
     # Overuse
+    ax.legend(loc="best")
     ax.set_xlabel("t (seconds)")
 
+    """
     ax = plt.subplot(PLOT_ROWS, PLOT_COLS, 5)
     ax.plot(time, loss_estimates, label='loss estimates')
     ax.plot(time, delay_estimates, label='delay estimates')
@@ -146,6 +150,7 @@ def run():
     ax.plot(time, idvs, label='inter-group delay variation')
     ax.set_ylabel("m(ti)")
     ax.legend(loc="best")
+    """
 
     plt.show()
     
