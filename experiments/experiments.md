@@ -1,0 +1,42 @@
+# GCC Experiments and Results
+
+Various scenarios were run and tested against Quinn using the QUIC adapted version of the GCC congestion controller. Plots were included to help visualize the behavior of the system.
+
+## Test Setup
+
+![image](./test_setup.png)
+
+A QUIC connection is created between two endpoints, a client and a server. Both QUIC connections support ACK with timestamps and have a GCC congestion controller. The test application in a loop, calls `send_datagram` with a 1000 byte payload in a loop, paced at a certain interval. The interval could be static (ie every 7ms), or it could be dynamically calculated based on the GCC estimated bitrate feedback. The choice between either is selected by the test case.
+
+A traffic shaper is used to control certain aspects of the network, such as link capacity, packet loss rate, and propogation delay. The traffic shaper's used were the `dnctl` and `pfctl` utilities found on MacOS.
+
+## Test Variabes
+
+- Link capacity: the maximum bitrate on the link
+- Packet Loss Rate: the fraction of packets dropped
+- Propogation delay: the delay added to simulate network delays
+- Dynamic Interval Calculation (uses the estimated GCC bitrate to set the interval)
+- Static send interval (if dynamic is not used)
+
+## Test cases:
+
+### Static Interval Above Link Capacity
+
+Interval: 6ms -> 1333 kbps
+![image](./static_above.png)
+
+Outflow is limited by Quinn's congestion control window. Notice the window size compared to others.
+
+### Static Interval At Capacity
+
+Interval: 8ms -> 1000 kpbs
+![image](./at_capacity.png)
+
+### Static Interval Below Link Capacity
+
+Interval: 10ms -> 800 kbps
+![image](./static_under.png)
+
+### Dynamic Interval
+
+![image](./dynamic_interval.png)

@@ -28,7 +28,7 @@ impl NetworkUsage {
 
 #[derive(Clone)]
 pub(crate) struct OveruseDetector {
-    adaptive_threshold: AdaptiveThreshold,
+    pub adaptive_threshold: AdaptiveThreshold,
 
     increasing_duration: Duration,
     increasing_counter: u64,
@@ -36,7 +36,7 @@ pub(crate) struct OveruseDetector {
     // last_estimate is used to fulfill the following condition in the spec:
     // > However, if m(i) < m(i-1), over-use will not be signaled even if all the above
     // > conditions are met.
-    last_estimate: Duration,
+    pub last_estimate: Duration,
 
     last_use_detector_update: Instant,
     usage: NetworkUsage,

@@ -54,7 +54,7 @@ enum ControllerType {
 pub struct Gcc {
     rate_calculator: RateCalculator,
     loss_controller: LossController,
-    delay_controller: DelayController,
+    pub delay_controller: DelayController,
 
     last_pn: u64,
     epoch: Instant,
@@ -123,6 +123,17 @@ impl Gcc {
             last_pn: self.last_pn,
             effective_bitrate: self.rate_calculator.effective_bitrate(),
             gcc_estimated_bitrate: self.target_bitrate,
+            overuse_detector_threshold: self
+                .delay_controller
+                .overuse_detector
+                .adaptive_threshold
+                .threshold
+                .whole_milliseconds(),
+            overuse_detector_estimate: self
+                .delay_controller
+                .overuse_detector
+                .last_estimate
+                .whole_milliseconds(),
         }
     }
 
@@ -137,8 +148,7 @@ impl Controller for Gcc {
     }
 
     fn window(&self) -> u64 {
-        let ret = self.window.max(3 * self.mtu as u64);
-        ret
+        self.window
     }
 
     fn clone_box(&self) -> Box<dyn Controller> {
@@ -247,15 +257,17 @@ impl Controller for Gcc {
             trace!(
                 usage = stats.delay_ctrl_network_usage.string(),
                 state = stats.delay_ctrl_state.string(),
-                //delay_ctrl_bitrate = stats.delay_ctrl_bitrate,
-                //loss_ctrl_bitrate = stats.loss_ctrl_bitrate,
+                delay_ctrl_bitrate = stats.delay_ctrl_bitrate,
+                loss_ctrl_bitrate = stats.loss_ctrl_bitrate,
                 //loss_ctrl_packet_loss = packet_loss,
-                //loss_ctrl_avg_loss = stats.loss_ctrl_avg_loss,
+                average_loss = stats.loss_ctrl_avg_loss,
                 window = stats.window,
                 rtt = rtt.get().as_millis(),
                 //last_pn = stats.last_pn,
                 measurement = stats.effective_bitrate.map(|v| human_kbits(v)),
                 estimate = human_kbits(stats.gcc_estimated_bitrate),
+                overuse_detector_estimate = stats.overuse_detector_estimate,
+                overuse_detector_threshold = stats.overuse_detector_threshold,
             );
         }
     }
@@ -292,6 +304,8 @@ struct Stats {
     last_pn: u64,
     effective_bitrate: Option<Bitrate>,
     gcc_estimated_bitrate: Bitrate,
+    overuse_detector_threshold: i128,
+    overuse_detector_estimate: i128,
 }
 
 #[cfg(test)]

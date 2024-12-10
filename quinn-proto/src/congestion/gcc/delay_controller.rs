@@ -18,7 +18,7 @@ use super::arrival_filter::KalmanConfig;
 pub(crate) struct DelayController {
     prefilter: Prefilter,
     arrival_filter: Kalman,
-    overuse_detector: OveruseDetector,
+    pub overuse_detector: OveruseDetector,
     rate_controller: RateController,
 }
 
