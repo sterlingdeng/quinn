@@ -25,11 +25,18 @@ The test case is located at `./quinn/examples/gcc_test.rs`.
 To run the test and log only the output of the GCC trace logs, use the following command.
 ```RUST_LOG=quinn_proto::congestion::gcc=TRACE cargo run --example gcc_test```
 
+By default, a pacer in the test is used to control the bitrate thats send over the connection. If you want to set a static interval, modify the `static_interval` variable with a `Some(time::Duration)`.
+
 A shell script is available at `./traffic_shape.sh` which will apply a 1000 Kbit/s capacity on the network link between the two QUIC connections for the test above. There are other parameters that can be changed, see `man dnctl` for more details. (This scripts requires `sudo`).
+
+The commands are
+`sudo ./traffic_shape.sh delay` to enable the traffic shaper. By default it sets a 1000 Kbit/s capacity, 75 ms delay, and a 50 slot queue.
+`sudo ./traffic_shape.sh reset` resets and disables the traffic shaper.
+This script is tested and expected to work only on MacOS.
 
 The trace logs from the GCC component is logged as JSON to a file at `gcc_output.log` which is then used by `plot.py` to generate graphs to visualize the GCC behavior.
 
-The command is `python3 plot.py` and requires a matplotlib dependency.
+The command is `python3 plot.py` and requires matplotlib.
 
 ## Test cases:
 

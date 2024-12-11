@@ -10,8 +10,7 @@ const BURST_TIME: Duration = Duration::milliseconds(5);
 pub(crate) struct PacketGroup {
     acks: Vec<Acknowledgement>,
     departure: Duration,
-    // This is different than GCC because it's possible to not include the arrival time for a
-    // packet.
+    // This is different than Webrtc GCC because the arrival time info is optional.
     arrival: Option<Duration>,
 }
 

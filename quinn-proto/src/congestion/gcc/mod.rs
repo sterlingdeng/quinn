@@ -229,13 +229,13 @@ impl Controller for Gcc {
         }
 
         if let Some(loss_estimate) = self.loss_controller.calculate_loss_estimate(now) {
-            //trace!(loss_estimate, "loss estimate: bitrate");
             self.set_bitrate(loss_estimate, ControllerType::Loss)
         }
 
         self.loss_controller.add_bytes_acked(bytes);
 
-        self.window = Self::calculate_window(self.target_bitrate, rtt.get());
+        self.window =
+            Self::calculate_window(self.target_bitrate, rtt.get()).max(self.minimum_window());
 
         if false {
             trace!(
@@ -257,11 +257,9 @@ impl Controller for Gcc {
                 state = stats.delay_ctrl_state.string(),
                 delay_ctrl_bitrate = stats.delay_ctrl_bitrate,
                 loss_ctrl_bitrate = stats.loss_ctrl_bitrate,
-                //loss_ctrl_packet_loss = packet_loss,
                 average_loss = stats.loss_ctrl_avg_loss,
                 window = stats.window,
                 rtt = rtt.get().as_millis(),
-                //last_pn = stats.last_pn,
                 measurement = stats.effective_bitrate.map(|v| human_kbits(v)),
                 estimate = human_kbits(stats.gcc_estimated_bitrate),
                 overuse_detector_estimate = stats.overuse_detector_estimate,
@@ -307,17 +305,4 @@ struct Stats {
     gcc_estimated_bitrate: Bitrate,
     overuse_detector_threshold: i128,
     overuse_detector_estimate: i128,
-}
-
-#[cfg(test)]
-mod test {
-    use crate::congestion::BASE_DATAGRAM_SIZE;
-
-    #[test]
-    fn blah() {
-        assert_eq!(
-            10 * BASE_DATAGRAM_SIZE,
-            14720.clamp(2 * BASE_DATAGRAM_SIZE, 10 * BASE_DATAGRAM_SIZE)
-        );
-    }
 }

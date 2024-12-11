@@ -15,7 +15,7 @@ const INITIAL_DEL_VAR_TH: Duration = Duration::microseconds(12500);
 
 #[derive(Clone)]
 pub(crate) struct AdaptiveThreshold {
-    pub threshold: Duration,
+    pub(crate) threshold: Duration,
     last_update: Option<Instant>,
     num_deltas: i64,
 }

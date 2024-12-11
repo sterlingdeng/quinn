@@ -16,6 +16,9 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter, Registry};
 async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let test_length = Duration::from_secs(90);
 
+    // If static_interval is None, then the interval is paced by the GCC estimate.
+    let static_interval = None;
+
     // This is the sink for the GCC controller visualization output.
     let metrics_file = OpenOptions::new()
         .create(true)
@@ -116,23 +119,17 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
 
         // Dynamic interval below acts as a dynamic sender that tries to output a bitrate
         // thats requested by GCC.
-        let dynamic_interval =
-            Duration::from_millis((((1000 * 8) as f32 / bitrate as f32) * 1_000.) as u64);
-
-        // Uncomment below to set a static interval
-
-        // let interval = Duration::from_millis(10);
+        // Higher fidelity can be achieved if from_micros is used.
+        let interval = static_interval.unwrap_or(Duration::from_millis(
+            (((1000 * 8) as f32 / bitrate as f32) * 1_000.) as u64,
+        ));
 
         if i % 100 == 0 {
             // This is just convenience to print out whats happening in the loop.
-            println!(
-                "Interval: {}ms, Bitrate: {}",
-                dynamic_interval.as_millis(),
-                bitrate
-            );
+            println!("Interval: {}ms, Bitrate: {}", interval.as_millis(), bitrate);
         }
 
-        tokio::time::sleep(dynamic_interval).await;
+        tokio::time::sleep(interval).await;
         i += 1;
     }
 

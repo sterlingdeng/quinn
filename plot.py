@@ -92,19 +92,19 @@ def run():
     measurement_handle, = ax.plot(timestamps, measured_bitrates, label='measured bitrate')
     estimate_handle, = ax.plot(timestamps, gcc_estimates, label='gcc estimates')
     cap_handle = plt.axhline(y=1000, label='capacity', color='black', linestyle='--')
-
-    # Congestion window
-    cwnd_ax = ax.twinx()
-    cwnd_handle, = cwnd_ax.plot(timestamps, cwnds, color="red", label="window size")
-    cwnd_ax.set_ylabel("bytes")
-
-    ax.legend(handles=[measurement_handle, estimate_handle, cwnd_handle, cap_handle], loc="lower left")
+    ax.legend(handles=[measurement_handle, estimate_handle, cap_handle], loc="lower left")
 
     # RTT Plot
     ax = plt.subplot(PLOT_ROWS, PLOT_COLS, 2)
-    ax.plot(timestamps, rtts, 'g-', label='rtt')
+    tshandle, = ax.plot(timestamps, rtts, 'g-', label='rtt')
     ax.set_ylabel("ms")
     ax.legend(loc="best")
+
+    # Congestion window
+    cwnd_ax = ax.twinx()
+    cwnd_handle, = cwnd_ax.plot(timestamps, cwnds, color="red", label="cwnd")
+    cwnd_ax.set_ylabel("bytes")
+    ax.legend(handles=[cwnd_handle, tshandle], loc="lower left")
 
     # Average Loss
     ax = plt.subplot(PLOT_ROWS, PLOT_COLS, 3)
