@@ -59,7 +59,7 @@ pub struct Gcc {
     last_pn: u64,
     epoch: Instant,
 
-    mtu: u16,
+    mtu: u64,
     window: u64,
     last_update: Instant,
 
@@ -72,7 +72,7 @@ pub struct Gcc {
 impl Gcc {
     fn new(mtu: u16, now: Instant, report_stats: bool) -> Self {
         Self {
-            mtu,
+            mtu: mtu as u64,
             last_pn: 0,
             rate_calculator: RateCalculator::new(RateCalculatorConfig::default()),
             loss_controller: LossController::new(now, LossControllerConfig::default()),
@@ -138,11 +138,16 @@ impl Gcc {
     pub fn target_bitrate(&self) -> Bitrate {
         self.target_bitrate
     }
+
+    fn minimum_window(&self) -> u64 {
+        2 * self.mtu
+    }
 }
 
 impl Controller for Gcc {
     fn on_mtu_update(&mut self, new_mtu: u16) {
-        self.mtu = new_mtu;
+        self.mtu = new_mtu as u64;
+        self.window = self.window.max(self.minimum_window());
     }
 
     fn window(&self) -> u64 {
