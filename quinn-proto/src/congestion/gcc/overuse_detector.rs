@@ -3,8 +3,6 @@ use time::Duration;
 
 use crate::congestion::gcc::adaptive_threshold::AdaptiveThreshold;
 
-use tracing::field::Value;
-
 // Table 1 Recommened Values
 const INIT_VAL: Duration = Duration::microseconds(125);
 const OVERUSE_TIME_TH: Duration = Duration::milliseconds(10);

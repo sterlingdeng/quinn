@@ -13,10 +13,10 @@ OVER=1
 UNDER=-1
 
 def run():
-    measurements = []
-    estimates = []
-    rtt = []
-    time = []
+    measured_bitrates = []
+    gcc_estimates = []
+    rtts = []
+    timestamps = []
     cwnds = []
     avg_losses = []
 
@@ -26,31 +26,28 @@ def run():
 
     delay_estimates = []
     loss_estimates = []
-
-
     # inter delay variations
     idvs = []
 
-    oldtime = dt.datetime(2000,1, 1)
+    epoch = dt.datetime(2000,1, 1)
 
-    with open("metrics.log") as file:
+    with open("gcc_output.log") as file:
         for i, line in enumerate(file):
-
             data = json.loads(line)
             timestamp = data["timestamp"]
-            # Only render every 10th data point
-            if i % 2 != 0:
+            # Only render every 5th data point
+            if i % 10 != 0:
                 continue
 
             fields = data["fields"]
 
-            # TIME
+            # Timestamp
             ts = dt.datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S.%fZ')
             if i == 0:
-                oldtime = ts
-                time.append(0)
+                epoch = ts
+                timestamps.append(0)
             else:
-                time.append((ts-oldtime).total_seconds())
+                timestamps.append((ts-epoch).total_seconds())
 
             # cwnd
             cwnds.append(fields["window"])
@@ -58,16 +55,17 @@ def run():
             # Loss
             avg_losses.append(float(fields["average_loss"]))
 
-            # Effective bitrate
+            # Measured bitrate
             try:
-                measurements.append(kb2num(fields["measurement"]))
+                measured_bitrates.append(kb2num(fields["measurement"]))
             except:
-                measurements.append(0)
+                measured_bitrates.append(0)
 
             # GCC Estimate
-            estimates.append(kb2num(fields["estimate"]))
+            gcc_estimates.append(kb2num(fields["estimate"]))
+
             # RTT
-            rtt.append(float(fields["rtt"]))
+            rtts.append(float(fields["rtt"]))
 
             # Overuse detector
             overuse_detector_estimates.append(int(fields["overuse_detector_estimate"]))
@@ -82,7 +80,6 @@ def run():
 
             delay_estimates.append(float(fields["delay_ctrl_bitrate"])/1000)
             loss_estimates.append(float(fields["loss_ctrl_bitrate"])/1000)
-
             idvs.append(int(fields["idv"]))
 
 
@@ -92,36 +89,34 @@ def run():
     # Capacity and bitrate plot
     ax = plt.subplot(PLOT_ROWS, PLOT_COLS, 1)
     ax.set_ylabel("kbps")
-    measurement_handle, = ax.plot(time, measurements, label='measured bitrate')
-    estimate_handle, = ax.plot(time, estimates, label='gcc estimates')
+    measurement_handle, = ax.plot(timestamps, measured_bitrates, label='measured bitrate')
+    estimate_handle, = ax.plot(timestamps, gcc_estimates, label='gcc estimates')
     cap_handle = plt.axhline(y=1000, label='capacity', color='black', linestyle='--')
 
+    # Congestion window
     cwnd_ax = ax.twinx()
-    cwnd_handle, = cwnd_ax.plot(time, cwnds, color="red", label="window size")
+    cwnd_handle, = cwnd_ax.plot(timestamps, cwnds, color="red", label="window size")
     cwnd_ax.set_ylabel("bytes")
-    #cwnd_ax.set_ylim(2_000, 500_000)
 
     ax.legend(handles=[measurement_handle, estimate_handle, cwnd_handle, cap_handle], loc="lower left")
-    ax.plot()
-
 
     # RTT Plot
     ax = plt.subplot(PLOT_ROWS, PLOT_COLS, 2)
-    rtt_handle, = ax.plot(time, rtt, 'g-', label='rtt')
+    ax.plot(timestamps, rtts, 'g-', label='rtt')
     ax.set_ylabel("ms")
     ax.legend(loc="best")
 
+    # Average Loss
     ax = plt.subplot(PLOT_ROWS, PLOT_COLS, 3)
-    ax.plot(time, avg_losses, label="Average Loss")
+    ax.plot(timestamps, avg_losses, label="Average Loss")
     ax.set_ylabel("%")
     ax.legend(loc="best")
-    ax.plot()
 
     # Adaptive Threshold Plot
     ax = plt.subplot(PLOT_ROWS, PLOT_COLS, 4)
-    ax.plot(time, overuse_detector_thresholds, label='γ(ti)')
-    ax.plot(time, overuse_detector_estimates, label='m(ti)')
-    ax.plot(time, list(map(lambda x: -x, overuse_detector_thresholds)), label='-γ(ti)')
+    ax.plot(timestamps, overuse_detector_thresholds, label='γ(ti)')
+    ax.plot(timestamps, overuse_detector_estimates, label='m(ti)')
+    ax.plot(timestamps, list(map(lambda x: -x, overuse_detector_thresholds)), label='-γ(ti)')
     ax.set_title(label='Adaptive Threshold Internals')
     for i, usage in enumerate(usages):
         if i > 0:
@@ -133,7 +128,7 @@ def run():
             elif usage == UNDER:
                 color  = 'lightsteelblue'
                 label = 'Underuse'
-            ax.axvspan(time[i-1], time[i], facecolor=color)
+            ax.axvspan(timestamps[i-1], timestamps[i], facecolor=color)
 
     # Overuse
     ax.legend(loc="best")

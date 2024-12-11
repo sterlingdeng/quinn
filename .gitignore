@@ -9,3 +9,4 @@ Cargo.lock
 
 cargo-test-*
 tarpaulin-report.html
+gcc_output.log

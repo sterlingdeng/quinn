@@ -1,6 +1,7 @@
 #![cfg(feature = "rustls")]
 //! Commonly used code in most examples.
 
+use proto::congestion::GccConfig;
 use quinn::{ClientConfig, Endpoint, ServerConfig};
 use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
 
@@ -15,9 +16,8 @@ use std::{error::Error, net::SocketAddr, sync::Arc};
 pub fn make_client_endpoint(
     bind_addr: SocketAddr,
     server_certs: &[&[u8]],
-    cc_factory: Arc<dyn proto::congestion::ControllerFactory + Send + Sync + 'static>,
 ) -> Result<Endpoint, Box<dyn Error + Send + Sync + 'static>> {
-    let client_cfg = configure_client(server_certs, cc_factory)?;
+    let client_cfg = configure_client(server_certs)?;
     let mut endpoint = Endpoint::client(bind_addr)?;
     endpoint.set_default_client_config(client_cfg);
     Ok(endpoint)
@@ -46,17 +46,17 @@ pub fn make_server_endpoint(
 /// - server_certs: a list of trusted certificates in DER format.
 fn configure_client(
     server_certs: &[&[u8]],
-    cc_factory: Arc<dyn proto::congestion::ControllerFactory + Send + Sync + 'static>,
 ) -> Result<ClientConfig, Box<dyn Error + Send + Sync + 'static>> {
     let mut certs = rustls::RootCertStore::empty();
     for cert in server_certs {
         certs.add(CertificateDer::from(*cert))?;
     }
 
+    let gcc_factory = Arc::new(GccConfig::new(true));
     let mut cfg = ClientConfig::with_root_certificates(Arc::new(certs))?;
     let mut transport_config = proto::TransportConfig::default();
     transport_config.max_ack_timestamps(20_u32.into());
-    transport_config.congestion_controller_factory(cc_factory);
+    transport_config.congestion_controller_factory(gcc_factory);
 
     cfg.transport_config(Arc::new(transport_config));
 

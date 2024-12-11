@@ -18,10 +18,10 @@ use super::arrival_filter::KalmanConfig;
 pub(crate) struct DelayController {
     prefilter: Prefilter,
     arrival_filter: Kalman,
-    pub overuse_detector: OveruseDetector,
+    pub(crate) overuse_detector: OveruseDetector,
     rate_controller: RateController,
 
-    pub last_inter_delay_variation: time::Duration,
+    pub(crate) last_inter_delay_variation: time::Duration,
 }
 
 impl DelayController {
@@ -60,13 +60,6 @@ impl DelayController {
         let estimated_delay = self.arrival_filter.get_estimate();
 
         let network_usage = self.overuse_detector.process_estimate(estimated_delay, now);
-        /*
-        trace!(
-            measurement_ms = measurement.whole_microseconds(),
-            estimated_delay_ms = estimated_delay.whole_microseconds(),
-            ?network_usage
-        );
-        */
 
         let ret = self
             .rate_controller

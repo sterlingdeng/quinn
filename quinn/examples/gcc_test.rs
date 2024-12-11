@@ -2,11 +2,8 @@
 //!
 //! Checkout the `README.md` for guidance.
 
-use proto::congestion::GccConfig;
 use std::error::Error;
 use std::fs::OpenOptions;
-use std::io::prelude::*;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 mod common;
@@ -15,21 +12,16 @@ use common::{make_client_endpoint, make_server_endpoint};
 use tracing::{self, error, info, trace, trace_span, Instrument};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter, Registry};
 
-use serde_json;
-
-use simulation::{models::Manifest, Simulation};
-use ts_core::TrafficShaper;
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let test_length = Duration::from_secs(90);
-    let send_interval = Duration::from_millis(33);
 
+    // This is the sink for the GCC controller visualization output.
     let metrics_file = OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)
-        .open("metrics.log")
+        .open("gcc_output.log")
         .unwrap();
 
     Registry::default()
@@ -51,7 +43,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let (server_endpoint, server_cert) = make_server_endpoint(server_addr)?;
     let handle = tokio::spawn(
         async move {
-            // SERVER
+            // Server thread
             let incoming_conn = server_endpoint.accept().await.unwrap();
             let server_conn = incoming_conn.await.unwrap();
             trace!("connection accepted: addr={}", server_conn.remote_address());
@@ -76,40 +68,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                 }
             }
         }
-        .instrument(trace_span!("SERVER")),
+        .instrument(trace_span!("server")),
     );
 
-    /*
-    let sim_handle = tokio::spawn(
-        async {
-            let mut file = OpenOptions::new()
-                .read(true)
-                .open("./manifest.json")
-                .unwrap();
-
-            let mut contents = String::new();
-            let _ = file.read_to_string(&mut contents);
-            let manifest: Manifest = serde_json::from_str(&contents).unwrap();
-            let mut sim = Simulation::new(manifest, Instant::now());
-            println!("starting sim");
-            match sim.start().await {
-                Err(e) => println!("error running simulation: {}", e),
-                _ => {}
-            }
-        }
-        .instrument(trace_span!("SIM")),
-    );
-        */
-
-    let cc = GccConfig::new(true);
-
-    let client_endpoint = make_client_endpoint(
-        "0.0.0.0:7778".parse().unwrap(),
-        &[&server_cert],
-        Arc::new(cc),
-    )?;
+    let client_endpoint = make_client_endpoint("0.0.0.0:7778".parse().unwrap(), &[&server_cert])?;
     // connect to server
-    let span = trace_span!("CLIENT");
+    let span = trace_span!("client");
     let _guard = span.enter();
     let connection = client_endpoint
         .connect(server_addr, "localhost")
@@ -122,11 +86,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
 
     let buf = bytes::BytesMut::zeroed(1000);
     let buf = buf.freeze();
-    let connection2 = connection.clone();
-    tokio::spawn(
+    tokio::spawn({
+        let connection = connection.clone();
         async move {
             loop {
-                match connection2.read_datagram().await {
+                match connection.read_datagram().await {
                     Ok(_) => {}
                     Err(e) => {
                         error!("err: {}", e);
@@ -135,14 +99,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
                 }
             }
         }
-        .instrument(trace_span!("READ_CLIENT")),
-    );
+    });
 
-    let mut last_interval = Duration::ZERO;
+    // This is the loop that writes data to the server.
     let mut i = 0;
     while Instant::now() < end {
         connection.send_datagram(buf.clone()).unwrap();
 
+        // GCC bitrate is retrieved here.
         let bitrate = connection
             .congestion_state()
             .into_any()
@@ -150,23 +114,31 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
             .unwrap()
             .target_bitrate();
 
-        let interval =
-            Duration::from_micros((((1000 * 8) as f32 / bitrate as f32) * 1_000_000.) as u64);
-        //let interval = Duration::from_millis(10);
+        // Dynamic interval below acts as a dynamic sender that tries to output a bitrate
+        // thats requested by GCC.
+        let dynamic_interval =
+            Duration::from_millis((((1000 * 8) as f32 / bitrate as f32) * 1_000.) as u64);
+
+        // Uncomment below to set a static interval
+
+        // let interval = Duration::from_millis(10);
+
         if i % 100 == 0 {
-            println!("interval: {}ms, bitrate: {}", interval.as_millis(), bitrate);
+            // This is just convenience to print out whats happening in the loop.
+            println!(
+                "Interval: {}ms, Bitrate: {}",
+                dynamic_interval.as_millis(),
+                bitrate
+            );
         }
 
-        tokio::time::sleep(interval).await;
+        tokio::time::sleep(dynamic_interval).await;
         i += 1;
-        last_interval = interval
     }
 
     println!("dropping connection");
     connection.close(0u32.into(), b"");
     drop(connection);
-
-    //drop(_guard);
 
     println!("awaiting handle");
     handle.await.unwrap();
@@ -174,26 +146,3 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     info!("test exiting..");
     Ok(())
 }
-
-struct TrafficShapeManifest {
-    config: TrafficShapeConfig,
-    events: Vec<TrafficShapeEvent>,
-}
-
-struct TrafficShapeConfig {
-    Device: String,
-    Latency: u64,
-    TargetBW: u64,
-    PacketLoss: u64,
-    Addr: String,
-    Proto: String,
-    Port: String,
-}
-
-struct TrafficShapeEvent {
-    T: String,
-    PacketLoss: u64,
-    Latency: u64,
-}
-
-async fn traffic_shape() {}

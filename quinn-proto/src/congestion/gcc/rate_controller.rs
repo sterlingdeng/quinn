@@ -104,7 +104,6 @@ impl RateController {
                 }
             },
             NetworkUsage::Over => {
-                // Decrease the rate because of over use.
                 if now - self.last_decrease_time > DELAY_UPDATE_INTERVAL {
                     let new_bitrate = self.compute_decreased_rate(effective_bitrate);
                     self.latest_decrease_rate_ema
@@ -175,17 +174,6 @@ impl RateController {
             let eta = 1.08_f64.powf(f64::min(time_since_last_update_ms / 1000., 1.0));
             let new_rate = eta * self.target as f64;
             let max = 1.5 * effective_bitrate as f64;
-
-            /*
-            trace!(
-                effective_bitrate,
-                eta,
-                new_rate,
-                max,
-                self.target,
-                "CIR: multiplicative increase"
-            );
-            */
 
             if new_rate > max && new_rate > self.target as f64 {
                 Some(max as Bitrate)

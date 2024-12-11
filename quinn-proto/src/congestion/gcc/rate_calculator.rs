@@ -119,7 +119,6 @@ impl RateCalculator {
     }
 }
 
-// TODO(deng): TESTS!
 #[cfg(test)]
 mod tests {
     use super::*;

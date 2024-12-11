@@ -37,7 +37,7 @@ fn human_kbits<T: Into<f64>>(bits: T) -> String {
     format!("{:.2}kb", (bits.into() / 1_000.))
 }
 
-pub(crate) const DEFAULT_INITIAL_BITRATE: Bitrate = 750_000; // 10 kbps
+pub(crate) const DEFAULT_INITIAL_BITRATE: Bitrate = 500_000;
 pub(crate) const DEFAULT_MIN_BITRATE: Bitrate = 5_000;
 pub(crate) const DEFAULT_MAX_BITRATE: Bitrate = 1_000_000_000; // 1 Gbps
 
@@ -54,7 +54,7 @@ enum ControllerType {
 pub struct Gcc {
     rate_calculator: RateCalculator,
     loss_controller: LossController,
-    pub delay_controller: DelayController,
+    pub(crate) delay_controller: DelayController,
 
     last_pn: u64,
     epoch: Instant,
@@ -88,8 +88,6 @@ impl Gcc {
     }
 
     fn set_bitrate(&mut self, bitrate: Bitrate, controller_type: ControllerType) {
-        // let prev = Bitrate::min(self.delay_bitrate, self.loss_bitrate);
-
         match controller_type {
             ControllerType::Delay => {
                 self.delay_bitrate = bitrate.clamp(DEFAULT_MIN_BITRATE, DEFAULT_MAX_BITRATE);
@@ -120,7 +118,6 @@ impl Gcc {
             loss_ctrl_packet_loss: self.loss_controller.get_loss_ratio(),
             loss_ctrl_avg_loss: self.loss_controller.get_average_loss(),
             window: self.window,
-            last_pn: self.last_pn,
             effective_bitrate: self.rate_calculator.effective_bitrate(),
             gcc_estimated_bitrate: self.target_bitrate,
             overuse_detector_threshold: self
@@ -137,6 +134,7 @@ impl Gcc {
         }
     }
 
+    /// Returns the target bitrate of GCC.
     pub fn target_bitrate(&self) -> Bitrate {
         self.target_bitrate
     }
@@ -248,11 +246,6 @@ impl Controller for Gcc {
         self.last_update = now;
         if true && self.report_stats {
             let stats = self.stats();
-            let packet_loss = if stats.loss_ctrl_packet_loss.is_none() {
-                0.
-            } else {
-                stats.loss_ctrl_packet_loss.unwrap()
-            };
             let _span = trace_span!("stats").entered();
             trace!(
                 usage = stats.delay_ctrl_network_usage.string(),
@@ -305,7 +298,6 @@ struct Stats {
     loss_ctrl_avg_loss: f64,
 
     window: u64,
-    last_pn: u64,
     effective_bitrate: Option<Bitrate>,
     gcc_estimated_bitrate: Bitrate,
     overuse_detector_threshold: i128,
