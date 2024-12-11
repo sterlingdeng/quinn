@@ -18,6 +18,19 @@ A traffic shaper is used to control certain aspects of the network, such as link
 - Dynamic Interval Calculation (uses the estimated GCC bitrate to set the interval)
 - Static send interval (if dynamic is not used)
 
+## How to run
+
+The test case is located at `./quinn/examples/gcc_test.rs`.
+
+To run the test and log only the output of the GCC trace logs, use the following command.
+```RUST_LOG=quinn_proto::congestion::gcc=TRACE cargo run --example gcc_test```
+
+A shell script is available at `./traffic_shape.sh` which will apply a 1000 Kbit/s capacity on the network link between the two QUIC connections for the test above. There are other parameters that can be changed, see `man dnctl` for more details. (This scripts requires `sudo`).
+
+The trace logs from the GCC component is logged as JSON to a file at `gcc_output.log` which is then used by `plot.py` to generate graphs to visualize the GCC behavior.
+
+The command is `python3 plot.py` and requires a matplotlib dependency.
+
 ## Test cases:
 
 ### Static Interval Above Link Capacity
